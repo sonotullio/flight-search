@@ -1,0 +1,41 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t flight-search-service .
+          docker tag flight-search-service:latest ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO }}:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO }}:latest
+
+      - name: Apply Kubernetes Deployment
+        run: |
+          aws eks update-kubeconfig --name flight-cluster --region eu-west-1
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+
+      - name: Update Kubernetes Deployment
+        run: |
+          kubectl set image deployment/flight-search-service flight-search-service=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO }}:latest
+          kubectl rollout restart deployment/flight-search-service
