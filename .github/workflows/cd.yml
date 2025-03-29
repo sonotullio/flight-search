@@ -1,9 +1,10 @@
 name: CD Pipeline
 
 on:
-  push:
-    branches:
-      - master
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
 
 jobs:
   deploy:
@@ -22,12 +23,6 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-      - name: Build and Push Docker Image
-        run: |
-          docker build --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} -t flight-search-service .
-          docker tag flight-search-service:latest ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO }}:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO }}:latest
 
       - name: Apply Kubernetes Deployment
         run: |
